@@ -1,0 +1,64 @@
+name: API Automation Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: 123456
+          MYSQL_DATABASE: qa_shop
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Init Database
+      run: |
+        mysql -h 127.0.0.1 -uroot -p123456 qa_shop < init.sql
+
+    - name: Start FastAPI
+      env:
+        DB_URL: "mysql+pymysql://root:123456@127.0.0.1:3306/qa_shop?charset=utf8mb4"
+      run: |
+        uvicorn app.main:app --port 8000 &
+        sleep 5
+
+    - name: Run Tests
+      env:
+        DB_URL: "mysql+pymysql://root:123456@127.0.0.1:3306/qa_shop?charset=utf8mb4"
+      run: |
+        pytest tests -v --alluredir=./allure-results
+
+    - name: Generate Allure Report
+      if: always()
+      run: |
+        npm install -g allure-commandline --save-dev
+        allure generate ./allure-results -o ./allure-report --clean
+
+    - name: Upload Report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: allure-report
+        path: ./allure-report

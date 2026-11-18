@@ -1,0 +1,16 @@
+# 虚拟环境
+.venv/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# pytest 缓存
+.pytest_cache/
+
+# Allure 报告和临时文件
+allure-results/
+allure-report/
+
+# 环境变量
+.env

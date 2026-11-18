@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
+import os
 
 app = FastAPI()
 
 # Docker MySQL 映射在 3307
-DB_URL = "mysql+pymysql://root:123456@127.0.0.1:3307/qa_shop?charset=utf8mb4"
+DB_URL = os.getenv("DB_URL", "mysql+pymysql://root:123456@127.0.0.1:3307/qa_shop?charset=utf8mb4")
 engine = create_engine(DB_URL, pool_pre_ping=True)
 
 class LoginRequest(BaseModel):
