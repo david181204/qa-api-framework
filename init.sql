@@ -19,3 +19,4 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 INSERT INTO users (username, password) VALUES ('david', '123456');
 INSERT INTO products (name, price, stock) VALUES ('iPhone', 5999.00, 100);
+INSERT INTO products (name, price, stock) VALUES ('MacBook', 12999.00, 50);

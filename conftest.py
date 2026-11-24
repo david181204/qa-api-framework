@@ -1,9 +1,10 @@
+import os
 import pytest
 import requests
 from sqlalchemy import create_engine, text
 
 BASE_URL = "http://127.0.0.1:8000"
-DB_URL = "mysql+pymysql://root:123456@127.0.0.1:3307/qa_shop?charset=utf8mb4"
+DB_URL = os.getenv("DB_URL", "mysql+pymysql://root:123456@127.0.0.1:3307/qa_shop?charset=utf8mb4")
 
 @pytest.fixture(scope="session")
 def base_url():
