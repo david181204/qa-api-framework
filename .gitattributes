@@ -1,0 +1,14 @@
+# 统一换行符：仓库内存 LF，检出到工作区也是 LF。
+# 这样 Windows 本地、Linux CI、macOS 三边一致，不会因为 CRLF/LF 产生无意义的 diff。
+# 注意：规则从上到下覆盖，后面的规则优先级更高。
+* text=auto eol=lf
+
+# 二进制文件不做任何换行转换
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.pyc   binary

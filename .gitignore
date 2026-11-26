@@ -14,3 +14,17 @@ allure-report/
 
 # 环境变量
 .env
+
+# ---------- 个人求职材料：严禁提交到公开仓库 ----------
+# 仓库一旦设为 Public，这些内容会被搜索引擎和爬虫抓取（手机号/邮箱/证件照）。
+resume/
+assets/photo*.jpg
+assets/photo*.png
+scripts/build_resume_docx.py
+docs/06-简历纯文本-可复制.md
+
+# ---------- 编辑器 / 系统垃圾 ----------
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
