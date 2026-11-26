@@ -1,43 +1,78 @@
-import os
+"""pytest 全局 fixture。
+
+分层后的职责：
+    config/   环境参数
+    api/      怎么发请求
+    conftest  把 api 对象、测试数据组装成 fixture 提供给用例
+    tests/    业务断言（只依赖 fixture，不关心 HTTP 细节）
+"""
 import pytest
-import requests
 from sqlalchemy import create_engine, text
 
-BASE_URL = "http://127.0.0.1:8000"
-DB_URL = os.getenv("DB_URL", "mysql+pymysql://root:123456@127.0.0.1:3307/qa_shop?charset=utf8mb4")
+from api.login_api import LoginApi
+from api.order_api import OrderApi
+from api.product_api import ProductApi
+from config.settings import DB_URL
+
+
+# ---------------- 接口对象（整个会话复用，内部复用 TCP 连接） ----------------
 
 @pytest.fixture(scope="session")
-def base_url():
-    return BASE_URL
+def login_api():
+    api = LoginApi()
+    yield api
+    api.close()
+
 
 @pytest.fixture(scope="session")
-def token(base_url):
-    r = requests.post(f"{base_url}/login", json={"username": "david", "password": "123456"})
+def product_api():
+    api = ProductApi()
+    yield api
+    api.close()
+
+
+@pytest.fixture(scope="session")
+def order_api():
+    api = OrderApi()
+    yield api
+    api.close()
+
+
+# ---------------- 登录态 ----------------
+
+@pytest.fixture(scope="session")
+def token(login_api):
+    """登录一次，全用例集复用。
+
+    风险提示：如果 token 有过期时间，跑长用例集时会失效，导致后续用例集体 401。
+    当前服务端签发的 token 永不过期（见缺陷 D7），所以这个坑暂时暴露不出来。
+    """
+    r = login_api.login("david", "123456")
     assert r.status_code == 200
     return r.json()["token"]
 
+
+# ---------------- 数据库 ----------------
+
 @pytest.fixture(scope="session")
 def db_engine():
-    """提供数据库连接"""
+    """提供数据库连接。pool_pre_ping 会在取连接前 ping 一次，丢弃已断开的死连接。"""
     engine = create_engine(DB_URL, pool_pre_ping=True)
     yield engine
     engine.dispose()  # 测试结束后释放连接
 
+
+# ---------------- 测试数据（造 + 清，保证用例可重复执行） ----------------
+
 @pytest.fixture
-def test_product(base_url, token, db_engine):
-    """
-    造数据：每次执行前，新增一个库存为100的专属测试商品
-    清理：每次执行后，删除这个商品和它的订单，保证环境干净
-    """
-    # 1. 前置：插入测试商品
+def test_product(db_engine):
+    """正向用例专用商品：库存 100，用完连订单一起删除。"""
     with db_engine.begin() as conn:
         conn.execute(text("INSERT INTO products (name, price, stock) VALUES ('TestPhone', 1000.00, 100)"))
-        # 获取刚插入的id
         product_id = conn.execute(text("SELECT LAST_INSERT_ID()")).scalar()
-    
-    yield product_id  # 把 product_id 传给测试用例用
 
-    # 2. 后置：清理数据（删订单 -> 删商品）
+    yield product_id
+
     with db_engine.begin() as conn:
         conn.execute(text("DELETE FROM orders WHERE product_id=:pid"), {"pid": product_id})
         conn.execute(text("DELETE FROM products WHERE id=:pid"), {"pid": product_id})
@@ -45,14 +80,12 @@ def test_product(base_url, token, db_engine):
 
 @pytest.fixture
 def order_case_product(db_engine):
-    """
-    异常用例专用商品：库存小（10），每次执行后连订单一起删除。
+    """异常用例专用商品：库存 10，用完连订单一起删除。
 
-    为什么需要它：
-    test_create_order_invalid_cases 里有一条「伪造 token 仍能下单成功」(BUG-001)，
-    它每跑一次就会真的扣一次库存。如果直接用种子商品 id=2，库存会被测试慢慢吃光，
-    跑到第 N 次时这条用例就会因为「库存不足」变成 400，用例莫名变红 —— 也就是 flaky test。
-    所以异常用例也必须使用自己的数据，不能碰公共数据。
+    为什么异常用例也要隔离数据：
+    里面有一条「伪造 token 仍能下单成功」(BUG-001)，它每跑一次就真的扣一次库存。
+    如果用公共种子商品，库存会被测试慢慢吃光，跑到第 N 次时这条用例会因为
+    「库存不足」返回 400 而变红 —— 也就是 flaky test（用例自己制造的不稳定）。
     """
     with db_engine.begin() as conn:
         conn.execute(text("INSERT INTO products (name, price, stock) VALUES ('OrderCasePhone', 100.00, 10)"))
