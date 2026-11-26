@@ -32,23 +32,36 @@ class TestOrders:
 
     @allure.story("异常用例")
     @allure.title("下单参数与权限异常测试")
-    @pytest.mark.parametrize("product_id, quantity, token_str, expected_code", [
-        (2, 1, "", 401),            # 无 Token
-        (2, 1, "token-fake", 200),  # BUG记录：伪造前缀依然能下单成功
-        (2, 0, "valid", 400),       # 数量为 0
-        (2, -1, "valid", 400),      # 数量为负数
-        (99999, 1, "valid", 404),   # 商品不存在
+    @pytest.mark.parametrize("quantity, token_str, expected_code", [
+        (1, "", 401),               # 无 Token
+        pytest.param(
+            1, "token-fake", 401,
+            marks=pytest.mark.xfail(
+                reason="BUG-001：服务端仅校验 token 前缀，伪造 token 仍可下单成功（未修复）",
+                strict=True,
+            ),
+        ),
+        (0, "valid", 400),          # 数量为 0
+        (-1, "valid", 400),         # 数量为负数
     ])
-    def test_create_order_invalid_cases(self, base_url, token, product_id, quantity, token_str, expected_code):
+    def test_create_order_invalid_cases(self, base_url, order_case_product, token,
+                                        quantity, token_str, expected_code):
         # 如果传入的是 valid，就使用 fixture 里的真 token
         actual_token = token if token_str == "valid" else token_str
-        payload = {"product_id": product_id, "quantity": quantity, "token": actual_token}
+        payload = {"product_id": order_case_product, "quantity": quantity, "token": actual_token}
         r = requests.post(f"{base_url}/orders", json=payload)
         assert r.status_code == expected_code
 
     @allure.story("异常用例")
+    @allure.title("下单商品不存在")
+    def test_create_order_product_not_found(self, base_url, token):
+        payload = {"product_id": 99999999, "quantity": 1, "token": token}
+        r = requests.post(f"{base_url}/orders", json=payload)
+        assert r.status_code == 404
+
+    @allure.story("异常用例")
     @allure.title("下单缺少必填字段")
-    def test_create_order_missing_field(self, base_url, token):
-        payload = {"product_id": 1, "token": token}
+    def test_create_order_missing_field(self, base_url, order_case_product, token):
+        payload = {"product_id": order_case_product, "token": token}
         r = requests.post(f"{base_url}/orders", json=payload)
         assert r.status_code == 422
